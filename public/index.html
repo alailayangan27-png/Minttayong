@@ -2,9 +2,113 @@
 <html>
 <head>
 <meta charset="UTF-8">
-<title>WAR TOKEN</title>
+<title>WAR LAUNCHPAD</title>
+
 <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
-<link rel="stylesheet" href="style.css">
+
+<style>
+body{
+  margin:0;
+  font-family:Arial;
+  background:radial-gradient(circle at top,#050505,#000);
+  color:white;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  height:100vh;
+}
+
+.container{
+  width:400px;
+}
+
+.card{
+  background:rgba(20,20,20,0.8);
+  backdrop-filter:blur(10px);
+  border:1px solid #222;
+  padding:25px;
+  border-radius:20px;
+  box-shadow:0 0 50px rgba(0,255,200,0.1);
+}
+
+h2{
+  text-align:center;
+  color:#00ffc8;
+  letter-spacing:2px;
+}
+
+button{
+  width:100%;
+  padding:12px;
+  border:none;
+  border-radius:12px;
+  background:linear-gradient(90deg,#00ffc8,#0099ff);
+  color:black;
+  font-weight:bold;
+  cursor:pointer;
+  transition:0.2s;
+}
+
+button:hover{
+  transform:scale(1.03);
+}
+
+.wallet{
+  text-align:center;
+  margin:10px 0;
+  font-size:13px;
+  color:#aaa;
+}
+
+input{
+  width:100%;
+  padding:12px;
+  border-radius:12px;
+  border:none;
+  background:#1a1a1a;
+  color:white;
+  margin-top:10px;
+  font-size:16px;
+}
+
+.preview{
+  margin-top:10px;
+  text-align:center;
+  font-size:14px;
+  color:#00ffc8;
+}
+
+.progress{
+  height:10px;
+  background:#111;
+  border-radius:10px;
+  margin-top:15px;
+  overflow:hidden;
+}
+
+.bar{
+  height:100%;
+  width:0%;
+  background:linear-gradient(90deg,#00ffc8,#0099ff);
+  transition:0.3s;
+}
+
+.status{
+  margin-top:10px;
+  text-align:center;
+  font-size:13px;
+  color:#00ffc8;
+}
+
+.supply{
+  margin-top:15px;
+}
+
+.supply span{
+  font-size:12px;
+  color:#aaa;
+}
+</style>
 </head>
 
 <body>
@@ -12,26 +116,29 @@
 <div class="container">
 
 <div class="card">
-<h2>⚔ WAR PRESALE</h2>
 
-<div class="row">
-<button onclick="connect()">Connect</button>
-<button onclick="disconnect()">Disconnect</button>
-</div>
+<h2>⚔ WAR LAUNCHPAD</h2>
 
-<p id="wallet">Not connected</p>
+<button id="walletBtn" onclick="handleWallet()">Connect Wallet</button>
 
-<input id="amount" placeholder="0.1 - 1 SOL">
+<div id="wallet" class="wallet">Not connected</div>
+
+<input id="amount" placeholder="Enter SOL amount" oninput="updatePreview()">
+
+<div id="preview" class="preview">0 WAR</div>
 
 <button onclick="mint()">Mint WAR</button>
 
-<div class="progress"><div id="bar"></div></div>
-<p id="status">Idle</p>
+<div class="progress">
+  <div id="bar" class="bar"></div>
 </div>
 
-<div class="leaderboard">
-<h3>Top Minters</h3>
-<ul id="list"></ul>
+<div id="status" class="status">Idle</div>
+
+<div class="supply">
+  <span>Max per wallet: 1 SOL</span>
+</div>
+
 </div>
 
 </div>
@@ -41,74 +148,113 @@
 const RPC = "https://mainnet.helius-rpc.com/?api-key=ddaf427f-5b96-4dd1-adb3-d928888a109b";
 const RECEIVER = "Egp6tFjnQV9pZ277rS2m16fQbFPKYeZKGQ5RVYd9Mxec";
 
+const RATE = 100000;
+
 const connection = new solanaWeb3.Connection(RPC, "confirmed");
 
 let provider = window.solana;
+let connected = false;
 
-async function connect(){
-  const res = await provider.connect();
-  document.getElementById("wallet").innerText = res.publicKey.toString();
+function short(addr){
+  return addr.slice(0,4) + "..." + addr.slice(-4);
 }
 
-async function disconnect(){
-  await provider.disconnect();
-  document.getElementById("wallet").innerText = "Disconnected";
+async function handleWallet(){
+
+  if(!provider){
+    alert("Install Phantom");
+    return;
+  }
+
+  if(!connected){
+    const res = await provider.connect();
+    connected = true;
+
+    document.getElementById("wallet").innerText = short(res.publicKey.toString());
+    document.getElementById("walletBtn").innerText = "Disconnect";
+  }else{
+    await provider.disconnect();
+    connected = false;
+
+    document.getElementById("wallet").innerText = "Not connected";
+    document.getElementById("walletBtn").innerText = "Connect Wallet";
+  }
+}
+
+function updatePreview(){
+  const amount = parseFloat(document.getElementById("amount").value) || 0;
+  const war = amount * RATE;
+  document.getElementById("preview").innerText = war.toLocaleString() + " WAR";
 }
 
 async function mint(){
 
-  const amount = parseFloat(document.getElementById("amount").value);
+  try{
 
-  if(!amount || amount < 0.1 || amount > 1){
-    alert("Invalid amount");
-    return;
+    if(!connected){
+      alert("Connect wallet first");
+      return;
+    }
+
+    const amount = parseFloat(document.getElementById("amount").value);
+
+    if(!amount || amount < 0.1 || amount > 1){
+      alert("Min 0.1 - Max 1 SOL");
+      return;
+    }
+
+    const lamports = amount * solanaWeb3.LAMPORTS_PER_SOL;
+
+    setStatus("Preparing...",20);
+
+    const { blockhash } = await connection.getLatestBlockhash();
+
+    const tx = new solanaWeb3.Transaction({
+      feePayer: provider.publicKey,
+      recentBlockhash: blockhash
+    });
+
+    tx.add(
+      solanaWeb3.SystemProgram.transfer({
+        fromPubkey: provider.publicKey,
+        toPubkey: new solanaWeb3.PublicKey(RECEIVER),
+        lamports: lamports
+      })
+    );
+
+    setStatus("Sign...",50);
+
+    const signed = await provider.signTransaction(tx);
+
+    setStatus("Sending...",70);
+
+    const sig = await connection.sendRawTransaction(signed.serialize());
+
+    setStatus("Confirming...",90);
+
+    await connection.confirmTransaction(sig);
+
+    setStatus("SUCCESS ⚔",100);
+
+    await fetch("/api/mint", {
+      method:"POST",
+      headers:{ "Content-Type":"application/json" },
+      body: JSON.stringify({
+        wallet: provider.publicKey.toString(),
+        amount
+      })
+    });
+
+  }catch(e){
+    setStatus("FAILED",0);
+    console.error(e);
   }
-
-  const tx = new solanaWeb3.Transaction().add(
-    solanaWeb3.SystemProgram.transfer({
-      fromPubkey: provider.publicKey,
-      toPubkey: new solanaWeb3.PublicKey(RECEIVER),
-      lamports: amount * solanaWeb3.LAMPORTS_PER_SOL
-    })
-  );
-
-  const { blockhash } = await connection.getLatestBlockhash();
-
-  tx.recentBlockhash = blockhash;
-  tx.feePayer = provider.publicKey;
-
-  const signed = await provider.signTransaction(tx);
-  const sig = await connection.sendRawTransaction(signed.serialize());
-
-  await connection.confirmTransaction(sig);
-
-  await fetch("/api/mint", {
-    method:"POST",
-    headers:{ "Content-Type":"application/json" },
-    body: JSON.stringify({
-      wallet: provider.publicKey.toString(),
-      amount
-    })
-  });
-
-  loadLeaderboard();
 }
 
-async function loadLeaderboard(){
-  const res = await fetch("/api/leaderboard");
-  const data = await res.json();
-
-  const list = document.getElementById("list");
-  list.innerHTML = "";
-
-  data.forEach(i=>{
-    const li = document.createElement("li");
-    li.innerText = i.wallet.slice(0,4)+"... "+i.total_sol+" SOL";
-    list.appendChild(li);
-  });
+function setStatus(text, percent){
+  document.getElementById("status").innerText = text;
+  document.getElementById("bar").style.width = percent + "%";
 }
-
-loadLeaderboard();
 
 </script>
 
