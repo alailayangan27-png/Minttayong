@@ -1,218 +1,44 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
 <meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WAR Launchpad</title>
-
+<link rel="stylesheet" href="style.css">
 <script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
-
-<style>
-body{
-  background:#050505;
-  font-family:sans-serif;
-  color:white;
-  display:flex;
-  justify-content:center;
-  align-items:center;
-  height:100vh;
-}
-
-.card{
-  width:360px;
-  padding:25px;
-  border-radius:20px;
-  background:#0c0c0c;
-  box-shadow:0 0 40px #00ffc355;
-}
-
-.title{
-  text-align:center;
-  font-size:24px;
-  margin-bottom:20px;
-  color:#00ffc3;
-}
-
-button{
-  width:100%;
-  padding:14px;
-  border:none;
-  border-radius:12px;
-  margin-top:10px;
-  font-weight:bold;
-  cursor:pointer;
-  font-size:15px;
-}
-
-.connect{
-  background:linear-gradient(90deg,#00ffc3,#0099ff);
-}
-
-.mint{
-  background:linear-gradient(90deg,#00ffa6,#00c3ff);
-}
-
-input{
-  width:100%;
-  padding:14px;
-  border-radius:12px;
-  border:none;
-  margin-top:10px;
-  background:#111;
-  color:white;
-  font-size:15px;
-}
-
-.progress{
-  height:10px;
-  background:#222;
-  border-radius:10px;
-  margin-top:15px;
-}
-
-.bar{
-  height:100%;
-  width:0%;
-  background:#00ffc3;
-  border-radius:10px;
-  transition:0.3s;
-}
-
-.status{
-  text-align:center;
-  margin-top:10px;
-  color:#00ffc3;
-}
-
-.wallet{
-  font-size:13px;
-  text-align:center;
-  margin-top:5px;
-  color:#888;
-}
-</style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js"></script>
 </head>
 
 <body>
 
-<div class="card">
+<div class="overlay"></div>
 
-<div class="title">⚔ WAR LAUNCHPAD</div>
+<div class="container">
 
-<button id="walletBtn" class="connect">Connect Wallet</button>
-<div id="wallet" class="wallet">Not connected</div>
+<h1>⚔️ WAR LAUNCHPAD</h1>
 
-<input id="amount" placeholder="Enter SOL amount">
+<button id="walletBtn">Connect Wallet</button>
+<p id="wallet">Not connected</p>
 
-<div id="warAmount" class="status">0 WAR</div>
+<input type="number" id="amount" placeholder="Enter SOL (0.1 - 1)">
+<p id="war">0 WAR</p>
 
-<button id="mintBtn" class="mint">Mint WAR</button>
+<button id="mintBtn">Mint WAR</button>
 
-<div class="progress">
-  <div id="bar" class="bar"></div>
+<div class="status" id="status">Ready</div>
+
+<div class="progressBox">
+<p id="progressText">0 / 100 SOL</p>
+<div class="bar">
+<div id="barFill"></div>
+</div>
 </div>
 
-<div id="globalText" class="status">Loading...</div>
+<h3>Top Buyers</h3>
+<ul id="leaderboard"></ul>
 
 </div>
 
-<script>
-let provider = window.solana;
-let wallet = null;
-
-
-const connection = new solanaWeb3.Connection(
-  "https://mainnet.helius-rpc.com/?api-key=ddaf427f-5b96-4dd1-adb3-d928888a109b"
-);
-
-function short(addr){
-  return addr.slice(0,4)+"..."+addr.slice(-4);
-}
-
-/* CONNECT / DISCONNECT */
-document.getElementById("walletBtn").onclick = async ()=>{
-  if(!wallet){
-    const res = await provider.connect();
-    wallet = res.publicKey.toString();
-    document.getElementById("wallet").innerText = short(wallet);
-    document.getElementById("walletBtn").innerText = "Disconnect";
-  }else{
-    await provider.disconnect();
-    wallet=null;
-    document.getElementById("wallet").innerText = "Not connected";
-    document.getElementById("walletBtn").innerText = "Connect Wallet";
-  }
-};
-
-/* AUTO HITUNG WAR */
-document.getElementById("amount").oninput = ()=>{
-  const val = parseFloat(amount.value)||0;
-  document.getElementById("warAmount").innerText =
-    (val * 100000).toLocaleString() + " WAR";
-};
-
-/* MINT */
-document.getElementById("mintBtn").onclick = async ()=>{
-
-  if(!wallet) return alert("Connect wallet");
-
-  const val = parseFloat(amount.value);
-
-  if(val < 0.1 || val > 1){
-    return alert("Min 0.1 Max 1 SOL");
-  }
-
-  try{
-
-    const tx = new solanaWeb3.Transaction().add(
-      solanaWeb3.SystemProgram.transfer({
-        fromPubkey: new solanaWeb3.PublicKey(wallet),
-        toPubkey: new solanaWeb3.PublicKey("Egp6tFjnQV9pZ277rS2m16fQbFPKYeZKGQ5RVYd9Mxec"),
-        lamports: val * solanaWeb3.LAMPORTS_PER_SOL
-      })
-    );
-
-    tx.feePayer = new solanaWeb3.PublicKey(wallet);
-
-    const { blockhash } = await connection.getLatestBlockhash();
-    tx.recentBlockhash = blockhash;
-
-    const signed = await provider.signTransaction(tx);
-    const sig = await connection.sendRawTransaction(signed.serialize());
-
-    await connection.confirmTransaction(sig);
-
-    await fetch("/api/mint",{
-      method:"POST",
-      headers:{"Content-Type":"application/json"},
-      body:JSON.stringify({ wallet, amount:val })
-    });
-
-    alert("SUCCESS ⚔");
-
-  }catch(e){
-    alert("FAILED: " + e.message);
-  }
-};
-
-/* GLOBAL PROGRESS */
-async function loadGlobal(){
-
-  const res = await fetch("/api/global");
-  const data = await res.json();
-
-  const max = 100;
-  const percent = (data.total_sol / max) * 100;
-
-  document.getElementById("bar").style.width = percent+"%";
-
-  document.getElementById("globalText").innerText =
-    data.total_sol.toFixed(2)+" / "+max+" SOL Raised";
-}
-
-setInterval(loadGlobal,3000);
-loadGlobal();
-
-</script>
-
+<script src="app.js"></script>
 </body>
 </html>
