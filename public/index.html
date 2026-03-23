@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>⚔ WAR TOKEN PRESALE</title>
+
+<script src="https://unpkg.com/@solana/web3.js@latest/lib/index.iife.js"></script>
+<link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+
+<div class="card">
+
+<h2>⚔ WAR PRESALE</h2>
+
+<div class="row">
+  <button onclick="connect()">Connect</button>
+  <button onclick="disconnect()">Disconnect</button>
+</div>
+
+<div id="wallet" class="wallet">Not connected</div>
+
+<input id="amount" placeholder="0.1 - 1 SOL">
+
+<button class="mint" onclick="mint()">⚔ Mint WAR</button>
+
+<div class="progress">
+  <div id="bar" class="bar"></div>
+</div>
+
+<div id="status" class="status">Idle</div>
+
+</div>
+
+<script>
+
+// =======================
+// 🔥 EDIT BAGIAN INI
+// =======================
+
+// API KEY Helius
+const RPC_URL = "https://mainnet.helius-rpc.com/?api-key=ISI_API_KEY_KAMU";
+
+// Wallet tujuan
+const RECEIVER = "ISI_WALLET_KAMU";
+
+// =======================
+
+const connection = new solanaWeb3.Connection(RPC_URL, "confirmed");
+
+let provider = window.solana;
+
+// CONNECT
+async function connect(){
+  if(!provider){
+    alert("Install Phantom Wallet");
+    return;
+  }
+
+  const res = await provider.connect();
+  document.getElementById("wallet").innerText = res.publicKey.toString();
+}
+
+// DISCONNECT
+async function disconnect(){
+  if(provider){
+    await provider.disconnect();
+    document.getElementById("wallet").innerText = "Disconnected";
+  }
+}
+
+// MINT
+async function mint(){
+  try{
+
+    if(!provider.publicKey){
+      alert("Connect wallet dulu");
+      return;
+    }
+
+    const amount = parseFloat(document.getElementById("amount").value);
+
+    if(!amount || amount < 0.1 || amount > 1){
+      alert("Min 0.1 - Max 1 SOL");
+      return;
+    }
+
+    const lamports = amount * solanaWeb3.LAMPORTS_PER_SOL;
+
+    document.getElementById("status").innerText = "Preparing...";
+    document.getElementById("bar").style.width = "20%";
+
+    const { blockhash } = await connection.getLatestBlockhash();
+
+    const tx = new solanaWeb3.Transaction({
+      feePayer: provider.publicKey,
+      recentBlockhash: blockhash
+    });
+
+    tx.add(
+      solanaWeb3.SystemProgram.transfer({
+        fromPubkey: provider.publicKey,
+        toPubkey: new solanaWeb3.PublicKey(RECEIVER),
+        lamports: lamports
+      })
+    );
+
+    document.getElementById("status").innerText = "Sign wallet...";
+    document.getElementById("bar").style.width = "50%";
+
+    const signed = await provider.signTransaction(tx);
+
+    document.getElementById("status").innerText = "Sending...";
+    document.getElementById("bar").style.width = "70%";
+
+    const sig = await connection.sendRawTransaction(signed.serialize());
+
+    document.getElementById("status").innerText = "Confirming...";
+    document.getElementById("bar").style.width = "90%";
+
+    await connection.confirmTransaction(sig);
+
+    document.getElementById("status").innerText = "SUCCESS ⚔";
+    document.getElementById("bar").style.width = "100%";
+
+    console.log("TX:", sig);
+
+  }catch(e){
+    console.error(e);
+    document.getElementById("status").innerText = "ERROR: " + e.message;
+    document.getElementById("bar").style.width = "0%";
+  }
+}
+
+</script>
+
+</body>
+</html>
