@@ -1,11 +1,15 @@
-import { supabase } from "../lib/supabase.js";
+import { supabase } from "../lib/db.js";
 
 export default async function handler(req, res){
 
   const { wallet, amount } = req.body;
 
   if(!wallet || !amount){
-    return res.json({ error:"Invalid" });
+    return res.json({ error: "Invalid request" });
+  }
+
+  if(amount < 0.1 || amount > 1){
+    return res.json({ error: "Min 0.1 / Max 1 SOL" });
   }
 
   const { data } = await supabase
@@ -17,7 +21,7 @@ export default async function handler(req, res){
   const total = data?.total_sol || 0;
 
   if(total + amount > 1){
-    return res.json({ error:"Limit exceeded" });
+    return res.json({ error: "Max 1 SOL per wallet" });
   }
 
   await supabase.from("mints").upsert({
@@ -25,5 +29,7 @@ export default async function handler(req, res){
     total_sol: total + amount
   });
 
-  res.json({ success:true });
+  await supabase.rpc("increment_global", { amount });
+
+  res.json({ success: true });
 }
